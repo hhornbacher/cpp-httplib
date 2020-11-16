@@ -4385,24 +4385,7 @@ inline int Server::bind_internal_unix_socket(const char *path,
   svr_sock_ = create_server_unix_socket(path, socket_flags, socket_options_);
   if (svr_sock_ == INVALID_SOCKET) { return -1; }
 
-  // if (port == 0) {
-  //   struct sockaddr_storage addr;
-  //   socklen_t addr_len = sizeof(addr);
-  //   if (getsockname(svr_sock_, reinterpret_cast<struct sockaddr *>(&addr),
-  //                   &addr_len) == -1) {
-  //     return -1;
-  //   }
-  //   if (addr.ss_family == AF_INET) {
-  //     return ntohs(reinterpret_cast<struct sockaddr_in *>(&addr)->sin_port);
-  //   } else if (addr.ss_family == AF_INET6) {
-  //     return ntohs(reinterpret_cast<struct sockaddr_in6
-  //     *>(&addr)->sin6_port);
-  //   } else {
-  //     return -1;
-  //   }
-  // } else {
-  //   return port;
-  // }
+  return 0;
 }
 
 inline int Server::bind_internal(const char *host, int port, int socket_flags) {
