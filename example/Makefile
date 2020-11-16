@@ -27,6 +27,9 @@ simplecli : simplecli.cc ../httplib.h Makefile
 simplesvr : simplesvr.cc ../httplib.h Makefile
 	$(CXX) -o simplesvr $(CXXFLAGS) simplesvr.cc $(OPENSSL_SUPPORT) $(ZLIB_SUPPORT) $(BROTLI_SUPPORT)
 
+simplesvr_unix_socket : simplesvr_unix_socket.cc ../httplib.h Makefile
+	$(CXX) -o simplesvr_unix_socket $(CXXFLAGS) simplesvr_unix_socket.cc $(OPENSSL_SUPPORT) $(ZLIB_SUPPORT) $(BROTLI_SUPPORT)
+
 upload : upload.cc ../httplib.h Makefile
 	$(CXX) -o upload $(CXXFLAGS) upload.cc $(OPENSSL_SUPPORT) $(ZLIB_SUPPORT) $(BROTLI_SUPPORT)
 
