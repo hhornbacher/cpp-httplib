@@ -175,6 +175,7 @@ using socket_t = SOCKET;
 #include <pthread.h>
 #include <sys/select.h>
 #include <sys/socket.h>
+#include <sys/un.h>
 #include <unistd.h>
 
 using socket_t = int;
@@ -639,11 +640,13 @@ public:
 
   void set_payload_max_length(size_t length);
 
+  bool bind_to_unix_socket(const char *path, int socket_flags = 0);
   bool bind_to_port(const char *host, int port, int socket_flags = 0);
   int bind_to_any_port(const char *host, int socket_flags = 0);
   bool listen_after_bind();
 
   bool listen(const char *host, int port, int socket_flags = 0);
+  bool listen_unix_socket(const char *path, int socket_flags = 0);
 
   bool is_running() const;
   void stop();
@@ -671,8 +674,11 @@ private:
   using HandlersForContentReader =
       std::vector<std::pair<std::regex, HandlerWithContentReader>>;
 
+  socket_t create_server_unix_socket(const char *path, int socket_flags,
+                                     SocketOptions socket_options) const;
   socket_t create_server_socket(const char *host, int port, int socket_flags,
                                 SocketOptions socket_options) const;
+  int bind_internal_unix_socket(const char *path, int socket_flags);
   int bind_internal(const char *host, int port, int socket_flags);
   bool listen_internal();
 
@@ -1855,6 +1861,33 @@ inline int shutdown_socket(socket_t sock) {
 #else
   return shutdown(sock, SHUT_RDWR);
 #endif
+}
+
+template <typename BindOrConnect>
+socket_t create_unix_socket(const char *path, int socket_flags,
+                            bool tcp_nodelay, SocketOptions socket_options,
+                            BindOrConnect bind_or_connect) {
+
+#ifndef _WIN32
+  assert("Unix sockets not supported on Windows");
+#endif
+
+  struct sockaddr_un address;
+
+  auto sock = socket(AF_LOCAL, SOCK_STREAM, 0);
+
+  if (sock == INVALID_SOCKET) { return INVALID_SOCKET; }
+
+  unlink(path);
+
+  address.sun_family = AF_LOCAL;
+  strcpy(address.sun_path, path);
+
+  if (bind_or_connect(sock, address)) { return sock; }
+
+  close_socket(sock);
+
+  return INVALID_SOCKET;
 }
 
 template <typename BindOrConnect>
@@ -3994,6 +4027,11 @@ inline void Server::set_payload_max_length(size_t length) {
   payload_max_length_ = length;
 }
 
+inline bool Server::bind_to_unix_socket(const char *path, int socket_flags) {
+  if (bind_internal_unix_socket(path, socket_flags) < 0) return false;
+  return true;
+}
+
 inline bool Server::bind_to_port(const char *host, int port, int socket_flags) {
   if (bind_internal(host, port, socket_flags) < 0) return false;
   return true;
@@ -4006,6 +4044,10 @@ inline bool Server::listen_after_bind() { return listen_internal(); }
 
 inline bool Server::listen(const char *host, int port, int socket_flags) {
   return bind_to_port(host, port, socket_flags) && listen_internal();
+}
+
+inline bool Server::listen_unix_socket(const char *path, int socket_flags) {
+  return bind_to_unix_socket(path, socket_flags) && listen_internal();
 }
 
 inline bool Server::is_running() const { return is_running_; }
@@ -4307,6 +4349,20 @@ inline bool Server::handle_file_request(Request &req, Response &res,
 }
 
 inline socket_t
+Server::create_server_unix_socket(const char *path, int socket_flags,
+                                  SocketOptions socket_options) const {
+  return detail::create_unix_socket(
+      path, socket_flags, tcp_nodelay_, std::move(socket_options),
+      [](socket_t sock, struct sockaddr_un &ai) -> bool {
+        if (::bind(sock, (struct sockaddr *)&ai, sizeof(ai))) { return false; }
+        if (::listen(sock, 5)) { // Listen through 5 channels
+          return false;
+        }
+        return true;
+      });
+}
+
+inline socket_t
 Server::create_server_socket(const char *host, int port, int socket_flags,
                              SocketOptions socket_options) const {
   return detail::create_socket(
@@ -4320,6 +4376,33 @@ Server::create_server_socket(const char *host, int port, int socket_flags,
         }
         return true;
       });
+}
+
+inline int Server::bind_internal_unix_socket(const char *path,
+                                             int socket_flags) {
+  if (!is_valid()) { return -1; }
+
+  svr_sock_ = create_server_unix_socket(path, socket_flags, socket_options_);
+  if (svr_sock_ == INVALID_SOCKET) { return -1; }
+
+  // if (port == 0) {
+  //   struct sockaddr_storage addr;
+  //   socklen_t addr_len = sizeof(addr);
+  //   if (getsockname(svr_sock_, reinterpret_cast<struct sockaddr *>(&addr),
+  //                   &addr_len) == -1) {
+  //     return -1;
+  //   }
+  //   if (addr.ss_family == AF_INET) {
+  //     return ntohs(reinterpret_cast<struct sockaddr_in *>(&addr)->sin_port);
+  //   } else if (addr.ss_family == AF_INET6) {
+  //     return ntohs(reinterpret_cast<struct sockaddr_in6
+  //     *>(&addr)->sin6_port);
+  //   } else {
+  //     return -1;
+  //   }
+  // } else {
+  //   return port;
+  // }
 }
 
 inline int Server::bind_internal(const char *host, int port, int socket_flags) {
