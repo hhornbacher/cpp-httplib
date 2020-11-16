@@ -12,6 +12,14 @@
  * Configuration
  */
 
+#ifndef CPPHTTPLIB_UNIX_SOCKET_OWNER_UID
+#define CPPHTTPLIB_UNIX_SOCKET_OWNER_UID getuid()
+#endif
+
+#ifndef CPPHTTPLIB_UNIX_SOCKET_OWNER_GID
+#define CPPHTTPLIB_UNIX_SOCKET_OWNER_GID getgid()
+#endif
+
 #ifndef CPPHTTPLIB_KEEPALIVE_TIMEOUT_SECOND
 #define CPPHTTPLIB_KEEPALIVE_TIMEOUT_SECOND 5
 #endif
@@ -1883,7 +1891,11 @@ socket_t create_unix_socket(const char *path, int socket_flags,
   address.sun_family = AF_LOCAL;
   strcpy(address.sun_path, path);
 
-  if (bind_or_connect(sock, address)) { return sock; }
+  if (bind_or_connect(sock, address)) {
+    chown(path, CPPHTTPLIB_UNIX_SOCKET_OWNER_UID,
+          CPPHTTPLIB_UNIX_SOCKET_OWNER_GID);
+    return sock;
+  }
 
   close_socket(sock);
 
